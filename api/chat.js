@@ -18,7 +18,7 @@ export default async function handler(req, res) {
 
   try {
     const {
-      messages
+      messages,
       username,
       aiTier,
       aiName,
