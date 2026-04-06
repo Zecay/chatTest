@@ -106,8 +106,8 @@ ${tierInfo}
     };
 
     // Optional: Trim messages based on tier memory
-    let maxMemory = 10;
-    if (tier === "go") maxMemory = 30;
+    let maxMemory = 20;
+    if (tier === "go") maxMemory = 60;
     if (tier === "plus") maxMemory = messages.length; // unlimited
 
     const trimmedMessages = messages.slice(-maxMemory);
