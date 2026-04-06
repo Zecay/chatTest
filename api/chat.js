@@ -1,4 +1,3 @@
-// pages/api/chat.js ← This is your updated file
 export default async function handler(req, res) {
   // CORS Headers - MUST be at the very top
   res.setHeader('Access-Control-Allow-Origin', '*');
