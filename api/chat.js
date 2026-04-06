@@ -12,7 +12,15 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { messages, username, aiTier, aiName } = req.body || {};
+    const { 
+      messages, 
+      username, 
+      aiTier, 
+      aiName, 
+      generateImage = false,   // New: from frontend button
+      testImageMode = false    // New: testing mode (set true to allow all tiers)
+    } = req.body || {};
+
     if (!messages || !messages.length) {
       return res.status(400).json({ reply: "No messages provided" });
     }
@@ -20,31 +28,37 @@ export default async function handler(req, res) {
     const tier = aiTier || "default";
     const botName = aiName || "Zecay AI";
 
-    // ================== MORE RELIABLE FREE MODELS ==================
-    let model = "qwen/qwen2.5-7b-instruct:free";
+    // ================== TEXT MODEL (OpenRouter Free) ==================
+    let textModel = "qwen/qwen2.5-7b-instruct:free";
 
     if (tier === "go") {
-      model = "meta-llama/llama-3.3-70b-instruct:free";   // Usually more stable
+      textModel = "meta-llama/llama-3.3-70b-instruct:free";
     } else if (tier === "plus") {
-      model = "qwen/qwen3.6-plus:free";                   // Strongest free right now
+      textModel = "qwen/qwen3.6-plus:free";
     }
+
+    const canGenerateImage = testImageMode || tier === "plus";
 
     const tierInfo = tier === "go" 
       ? "GO TIER: Smarter & faster, remembers up to 30 messages."
       : tier === "plus"
-      ? "PLUS TIER: Best quality + Image generation."
+      ? "PLUS TIER: Best quality + Image generation enabled."
       : "DEFAULT TIER: Standard responses.";
 
+    // ================== SYSTEM MESSAGE ==================
     const systemMessage = {
       role: "system",
       content: `
 You are ${botName}, a smart, friendly, slightly playful assistant in remix.gg.
-User: ${username || "Player"}.
-Speak casually, keep replies short and clear (1-3 sentences usually).
+Current user: ${username || "Player"}.
+Speak casually, keep replies short (1-3 sentences usually).
 Never mention models or technology.
-If user wants to generate/create/draw/make/show an image/picture/art, reply with **EXACT JSON only**:
-{"action": "generate_image", "prompt": "detailed image prompt"}
-Otherwise answer normally.
+
+IMAGE GENERATION RULES:
+- There is a "Generate Image" button next to the send button.
+- If the user wants an image but did NOT click the Generate Image button (generateImage=false), tell them politely: "Click the Generate Image button next to the send button if you want me to create an image!"
+- Only generate an image when generateImage=true.
+- When generating, reply with EXACT JSON only: {"action": "generate_image", "prompt": "very detailed prompt here"}
 
 AI TIER: ${tier.toUpperCase()} — ${tierInfo}
 `
@@ -53,62 +67,90 @@ AI TIER: ${tier.toUpperCase()} — ${tierInfo}
     const maxMemory = tier === "plus" ? messages.length : (tier === "go" ? 30 : 10);
     const messagesWithSystem = [systemMessage, ...messages.slice(-maxMemory)];
 
-    // Try main model, with simple fallback
-    let data;
-    let usedModel = model;
+    // ================== CALL TEXT AI ==================
+    const textResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        "HTTP-Referer": "https://remix.gg",
+        "X-Title": "Zecay AI",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: textModel,
+        messages: messagesWithSystem,
+        max_tokens: 600,
+        temperature: 0.75
+      })
+    });
 
-    const tryFetch = async (tryModel) => {
-      return await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-          "HTTP-Referer": "https://remix.gg",
-          "X-Title": "Zecay AI",
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: tryModel,
-          messages: messagesWithSystem,
-          max_tokens: 600,
-          temperature: 0.75
-        })
-      });
-    };
+    const data = await textResponse.json();
 
-    let response = await tryFetch(model);
-
-    if (!response.ok) {
-      // Fallback to a safer small model
-      console.log(`Model ${model} busy, trying fallback...`);
-      response = await tryFetch("qwen/qwen2.5-7b-instruct:free");
-      usedModel = "qwen/qwen2.5-7b-instruct:free";
-    }
-
-    data = await response.json();
-
-    if (!response.ok || data.error) {
-      console.error("OpenRouter Error:", data);
+    if (!textResponse.ok || data.error) {
+      console.error("Text AI Error:", data);
       return res.status(200).json({ 
-        reply: `⚠️ AI is busy right now. Wait 10 seconds and try again.` 
+        reply: `⚠️ AI is busy. Wait a few seconds and try again.` 
       });
     }
 
     let reply = data.choices?.[0]?.message?.content?.trim() || "Sorry, I got stuck...";
 
-    // ================== IMAGE DETECTION (Plus only) ==================
+    // ================== IMAGE GENERATION LOGIC ==================
     let result = { reply };
 
-    if (tier === "plus") {
-      try {
-        const parsed = JSON.parse(reply);
-        if (parsed.action === "generate_image" && parsed.prompt) {
+    // If frontend explicitly wants image (button clicked)
+    if (generateImage === true) {
+      if (!canGenerateImage) {
+        result = { 
+          reply: "Image generation is only available in **Plus tier** right now. Upgrade or turn on test mode!" 
+        };
+      } else {
+        // Extract prompt from last user message
+        const lastUserMessage = messages[messages.length - 1]?.content || reply;
+        const imagePrompt = typeof lastUserMessage === 'string' 
+          ? lastUserMessage 
+          : "A beautiful high quality image, detailed, cinematic";
+
+        // Call Qwen-Image-2512
+        const imageRes = await fetch(
+          "https://api-inference.huggingface.co/models/Qwen/Qwen-Image-2512",
+          {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${process.env.HF_TOKEN}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              inputs: imagePrompt,
+              parameters: {
+                num_inference_steps: 30,
+                guidance_scale: 4.0,
+                width: 1024,
+                height: 1024
+              }
+            })
+          }
+        );
+
+        if (imageRes.ok) {
+          const buffer = await imageRes.arrayBuffer();
+          const base64 = Buffer.from(buffer).toString('base64');
+          const imageUrl = `data:image/png;base64,${base64}`;
+
           result = {
-            reply: `🎨 Got it! Generating your image...`,
-            action: "generate_image",
-            prompt: parsed.prompt
+            reply: `🎨 Here's your image!`,
+            imageUrl: imageUrl,
+            action: "generated_image"
           };
+        } else {
+          result = { reply: "Failed to generate image. Try again." };
         }
-      } catch (e) {}
+      }
+    } 
+    // If user mentioned image but didn't click button
+    else if (reply.includes("generate_image") || reply.toLowerCase().includes("click the generate image button")) {
+      // Let the AI's instruction go through
+      result = { reply };
     }
 
     return res.status(200).json(result);
