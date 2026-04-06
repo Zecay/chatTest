@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     }
 
     // ===== 4️⃣ Determine model & tier info =====
-    let textModel = "ethzanalytics/distilgpt2-tiny-conversational"; // default
+    let textModel = "pszemraj/Ballpark-Trivia-XL"; // default
     let tierInfo = "";
     const tier = aiTier || "default";
 
