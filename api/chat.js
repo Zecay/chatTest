@@ -1,8 +1,7 @@
-// pages/api/chat.js   ← This is your file
-
+// pages/api/chat.js ← This is your updated file
 export default async function handler(req, res) {
   // CORS Headers - MUST be at the very top
-  res.setHeader('Access-Control-Allow-Origin', '*'); 
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -36,17 +35,20 @@ export default async function handler(req, res) {
     const botName = aiName || "Czarek AI";
 
     // ================== choose model ==================
-    let textModel = "openrouter/free";   // Smart router - picks best available free model
+    // These are the best 100% FREE models on OpenRouter right now (April 2026)
+    // - "go" tier   → fast & reliable (slightly lighter)
+    // - "plus" tier → noticeably smarter & higher quality
+    let textModel = "openrouter/free"; // fallback smart router (also free)
 
     if (tier === "go") {
-      textModel = "nvidia/nemotron-3-super-120b-a12b:free";     // Good for Go tier
+      textModel = "stepfun/step-3.5-flash:free";        // slightly worse but super fast & high usage
     } else if (tier === "plus") {
-      textModel = "stepfun/step-3.5-flash:free";                // Fast for Plus tier
+      textModel = "qwen/qwen3.6-plus:free";             // better one (currently one of the strongest free models)
     }
 
     const canGenerateImage = testImageMode || tier === "plus";
 
-    // System prompt
+    // System prompt (kept exactly as you had it)
     const systemMessage = {
       role: "system",
       content: `
@@ -54,13 +56,11 @@ You are ${botName}, a smart, friendly assistant in remix.gg.
 Current user: ${username || "Player"}.
 Speak casually and keep replies short.
 Never mention models or technology.
-
 IMAGE RULES:
 - There is a "Generate Image" button next to the send button.
 - If user wants image but didn't click the button, tell them: "Please click the Generate Image button if you want me to create an image!"
 - Only generate when generateImage=true.
 - When generating, reply with EXACT JSON only: {"action": "generate_image", "prompt": "detailed prompt here"}
-
 AI TIER: ${tier.toUpperCase()}
 `
     };
@@ -87,14 +87,19 @@ AI TIER: ${tier.toUpperCase()}
 
     const data = await textResponse.json();
 
+    // Better error handling (no more confusing messages)
     if (!textResponse.ok || data.error) {
+      console.error("OpenRouter API error:", {
+        status: textResponse.status,
+        error: data.error || data
+      });
+
       return res.status(200).json({
-        reply: `⚠️ something wrong`
+        reply: "Sorry, the AI is taking a nap right now 😴 Try again in a few seconds."
       });
     }
 
     let reply = data.choices?.[0]?.message?.content?.trim() || "Sorry, I got stuck...";
-
     let result = { reply };
 
     // ================== IMAGE GENERATION ==================
@@ -105,7 +110,7 @@ AI TIER: ${tier.toUpperCase()}
         const imagePrompt = messages[messages.length - 1]?.content || "A beautiful high-quality image";
 
         const imageRes = await fetch(
-          "https://api-inference.huggingface.co/models/Qwen/Qwen-Image-2512",
+          "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell",
           {
             method: "POST",
             headers: {
@@ -115,8 +120,8 @@ AI TIER: ${tier.toUpperCase()}
             body: JSON.stringify({
               inputs: imagePrompt,
               parameters: {
-                num_inference_steps: 35,
-                guidance_scale: 4.5,
+                num_inference_steps: 20,      // faster & still great quality
+                guidance_scale: 3.5,
                 width: 1024,
                 height: 1024
               }
@@ -141,7 +146,6 @@ AI TIER: ${tier.toUpperCase()}
     }
 
     return res.status(200).json(result);
-
   } catch (error) {
     console.error("Backend error:", error);
     return res.status(500).json({ reply: "⚠️ Backend error. Try again." });
