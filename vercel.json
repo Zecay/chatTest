@@ -2,7 +2,7 @@
   "version": 2,
   "headers": [
     {
-      "source": "/chat",
+      "source": "/api/chat",
       "headers": [
         { "key": "Access-Control-Allow-Origin", "value": "*" },
         { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
