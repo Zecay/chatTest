@@ -23,7 +23,7 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           model: "Qwen/Qwen2.5-7B-Instruct",
           messages: messages,
-          max_tokens: 250,
+          max_tokens: 600,
           temperature: 0.75
         })
       }
