@@ -146,12 +146,25 @@ ${tierInfo}
     });
 
     const data = await hfResponse.json();
+    
+    // ===== DEBUG: Log full response =====
+    console.log("HuggingFace Response:", JSON.stringify(data, null, 2));
+    console.log("Model used:", textModel);
+    
     let reply = "Sorry, I couldn't generate a response right now.";
 
     if (data.choices && data.choices[0]?.message?.content) {
       reply = data.choices[0].message.content.trim();
     } else if (data.error) {
-      reply = `Error: ${data.error}`;
+      // FIX: Show actual error message
+      const errorMsg = typeof data.error === 'string' 
+        ? data.error 
+        : JSON.stringify(data.error);
+      console.error("API Error:", errorMsg);
+      reply = `Error: ${errorMsg}`;
+    } else {
+      console.error("Unexpected response format:", data);
+      reply = "Unexpected response from AI. Try again.";
     }
 
     // ===== 10️⃣ Send response =====
