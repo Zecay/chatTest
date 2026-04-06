@@ -1,18 +1,25 @@
 export default async function handler(req, res) {
-  // Enable CORS so your remix.gg game can call it
+  // === CORS HEADERS (this is the fix) ===
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
 
+  // Handle preflight OPTIONS request (browser always sends this first)
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
+  }
+
+  // Only allow POST
+  if (req.method !== 'POST') {
+    return res.status(405).json({ reply: "Method not allowed" });
   }
 
   try {
     const { message } = req.body;
 
     if (!message) {
-      return res.status(400).json({ error: "No message provided" });
+      return res.status(400).json({ reply: "No message provided" });
     }
 
     const hfResponse = await fetch(
@@ -20,7 +27,7 @@ export default async function handler(req, res) {
       {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${process.env.HF_TOKEN}`,   // We'll add this in Vercel dashboard
+          "Authorization": `Bearer ${process.env.HF_TOKEN}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
@@ -36,7 +43,7 @@ export default async function handler(req, res) {
 
     const data = await hfResponse.json();
 
-    let reply = "Sorry, I couldn't generate a response.";
+    let reply = "Sorry, I couldn't generate a response right now.";
 
     if (Array.isArray(data) && data[0]?.generated_text) {
       reply = data[0].generated_text.trim();
@@ -50,6 +57,6 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ reply: "⚠️ Backend error. Try again." });
+    return res.status(500).json({ reply: "⚠️ Backend error. Please try again." });
   }
 }
