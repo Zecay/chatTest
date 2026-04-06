@@ -28,14 +28,14 @@ export default async function handler(req, res) {
     }
 
     // ===== 4️⃣ Determine model & tier info =====
-    let textModel = "Qwen/Qwen2.5-7B-Instruct"; // default
+    let textModel = "ethzanalytics/distilgpt2-tiny-conversational"; // default
     let tierInfo = "";
     const tier = aiTier || "default";
 
     if (tier === "go") {
-      textModel = "zementalist/llama-3-8B-chat-psychotherapist"; // EMPATHETIC
+      textModel = "Qwen/Qwen2.5-7B-Instruct"; // EMPATHETIC
     } else if (tier === "plus") {
-      textModel = "zementalist/llama-3-8B-chat-psychotherapist"; // EMPATHETIC
+      textModel = "Qwen/Qwen2.5-7B-Instruct"; // EMPATHETIC
     }
 
     if (tier === "go") {
