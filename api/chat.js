@@ -33,7 +33,7 @@ export default async function handler(req, res) {
     const tier = aiTier || "default";
 
     if (tier === "go" || tier === "plus") {
-      textModel = "mistralai/Mistral-7B-Instruct-v0.2"; // FREE & BETTER
+      textModel = "Qwen/Qwen2.5-14B-Instruct"; // BIGGER & SMARTER (FREE)
     }
 
     if (tier === "go") {
