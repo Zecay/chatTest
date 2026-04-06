@@ -1,16 +1,18 @@
 // pages/api/chat.js
-import { InferenceClient } from "@huggingface/inference";
+// FIXED & CLEANED VERSION - CORS + dynamic image import
+
+import { InferenceClient } from "@huggingface/inference"; // kept for type safety, but we use dynamic import below
 
 export default async function handler(req, res) {
+  // === IMPROVED CORS (works reliably with remix.gg and Vercel) ===
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-  // ← Removed Access-Control-Allow-Credentials (this was causing the preflight error with *)
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control');
+  res.setHeader('Access-Control-Max-Age', '86400'); // cache preflight for 24 hours
 
-  // Handle Preflight (OPTIONS) Request
+  // Handle Preflight (OPTIONS) Request immediately
   if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+    return res.status(200).end();
   }
 
   // Only allow POST requests
@@ -34,16 +36,15 @@ export default async function handler(req, res) {
 
     // === EASY CONFIGURATION SECTION ===
     // Change these values whenever you want (no other code changes needed)
-
     // Text models
     const DEFAULT_MODEL = "Qwen/Qwen2.5-7B-Instruct";
-    const GO_MODEL = "GO_MODEL_PLACEHOLDER";        // ← change this for "go" tier
-    const PLUS_MODEL = "PLUS_MODEL_PLACEHOLDER";    // ← change this for "plus" tier
+    const GO_MODEL = "GO_MODEL_PLACEHOLDER"; // ← change this for "go" tier
+    const PLUS_MODEL = "PLUS_MODEL_PLACEHOLDER"; // ← change this for "plus" tier
 
     // NEW Image generation config (Qwen/Qwen-Image-2512 via fal-ai)
     const IMAGE_PROVIDER = "fal-ai";
     const IMAGE_MODEL = "Qwen/Qwen-Image-2512";
-    const IMAGE_NUM_INFERENCE_STEPS = 5;   // increase if you want higher quality (slower)
+    const IMAGE_NUM_INFERENCE_STEPS = 5; // increase if you want higher quality (slower)
 
     // Default values
     const tier = aiTier || "default";
@@ -76,7 +77,7 @@ PLUS TIER:
 `;
     }
 
-    // System message (exactly as you have it)
+    // System message (exactly as you had it)
     const systemMessage = {
       role: "system",
       content: `
@@ -113,7 +114,7 @@ ${tierInfo}
 `
     };
 
-    // Memory limits per tier (exactly as you changed it)
+    // Memory limits per tier
     let maxMemory = 20;
     if (tier === "go") maxMemory = 60;
     if (tier === "plus") maxMemory = messages.length;
@@ -140,8 +141,8 @@ ${tierInfo}
     );
 
     const data = await hfResponse.json();
-
     let reply = "Sorry, I couldn't generate a response right now.";
+
     if (data.choices && data.choices[0]?.message?.content) {
       reply = data.choices[0].message.content.trim();
     } else if (data.error) {
@@ -159,9 +160,11 @@ ${tierInfo}
       } else {
         const imagePrompt = messages[messages.length - 1]?.content || "A beautiful high-quality image";
 
-        const client = new InferenceClient(process.env.HF_TOKEN);
-
         try {
+          // Dynamic import so the module doesn't break normal chat requests
+          const { InferenceClient } = await import("@huggingface/inference");
+          const client = new InferenceClient(process.env.HF_TOKEN);
+
           const imageBlob = await client.textToImage({
             provider: IMAGE_PROVIDER,
             model: IMAGE_MODEL,
@@ -186,8 +189,9 @@ ${tierInfo}
     }
 
     return res.status(200).json(result);
+
   } catch (error) {
-    console.error(error);
+    console.error("Backend error:", error);
     return res.status(500).json({ reply: "⚠️ Backend error. Try again." });
   }
 }
