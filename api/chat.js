@@ -1,128 +1,83 @@
-// pages/api/chat.js
-// FIXED & CLEANED VERSION - CORS + dynamic image import
-
-import { InferenceClient } from "@huggingface/inference"; // kept for type safety, but we use dynamic import below
-
 export default async function handler(req, res) {
-  // === IMPROVED CORS (works reliably with remix.gg and Vercel) ===
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control');
-  res.setHeader('Access-Control-Max-Age', '86400'); // cache preflight for 24 hours
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-  // Handle Preflight (OPTIONS) Request immediately
   if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+    res.status(200).end();
+    return;
   }
-
-  // Only allow POST requests
   if (req.method !== 'POST') {
     return res.status(405).json({ reply: "Method not allowed" });
   }
 
   try {
-    const {
-      messages,
-      username,
-      aiTier,
-      aiName,
-      generateImage = false,
-      testImageMode = false
-    } = req.body || {};
-
+    const { messages, username, aiTier, aiName } = req.body || {};
     if (!messages || !messages.length) {
       return res.status(400).json({ reply: "No messages provided" });
     }
 
-    // === EASY CONFIGURATION SECTION ===
-    // Change these values whenever you want (no other code changes needed)
-    // Text models
-    const DEFAULT_MODEL = "Qwen/Qwen2.5-7B-Instruct";
-    const GO_MODEL = "GO_MODEL_PLACEHOLDER"; // ← change this for "go" tier
-    const PLUS_MODEL = "PLUS_MODEL_PLACEHOLDER"; // ← change this for "plus" tier
-
-    // NEW Image generation config (Qwen/Qwen-Image-2512 via fal-ai)
-    const IMAGE_PROVIDER = "fal-ai";
-    const IMAGE_MODEL = "Qwen/Qwen-Image-2512";
-    const IMAGE_NUM_INFERENCE_STEPS = 5; // increase if you want higher quality (slower)
-
-    // Default values
     const tier = aiTier || "default";
     const botName = aiName || "Zecay AI";
 
-    // Tier configuration
-    let model = DEFAULT_MODEL;
-    let tierInfo = `
-DEFAULT TIER:
-- Can remember up to 10 past messages
-- Standard intelligence
-- Slower responses compared to higher tiers
-`;
+    // ================== TIER CONFIG ==================
+    let model = "Qwen/Qwen2.5-7B-Instruct";
+    let tierInfo = "";
+
     if (tier === "go") {
-      model = GO_MODEL;
+      model = "openai/gpt-oss-120b";           // ← Your Go tier model
       tierInfo = `
 GO TIER:
 - Can remember up to 30 past messages
-- Smarter and faster responses than default
+- Smarter and faster responses
 - More contextual understanding
 `;
     } else if (tier === "plus") {
-      model = PLUS_MODEL;
+      model = "Qwen/Qwen3-Omni-30B-A3B-Instruct";   // ← Your Plus tier model (omni for vision)
       tierInfo = `
 PLUS TIER:
-- Unlimited memory (can recall entire conversation)
-- Best response quality
-- Image generation support enabled
-- Highest intelligence and speed
+- Unlimited memory
+- Best response quality + Image understanding
+- Image generation available
+- Highest intelligence
+`;
+    } else {
+      tierInfo = `
+DEFAULT TIER:
+- Can remember up to 10 past messages
+- Standard intelligence
 `;
     }
 
-    // System message (exactly as you had it)
+    // ================== SYSTEM MESSAGE ==================
     const systemMessage = {
       role: "system",
       content: `
 You are ${botName}, a smart, friendly, and slightly playful assistant inside a game.
 The current user's name is ${username || "Player"}.
-Use their name naturally in conversation sometimes, but not in every message.
-⚠️ The user can change their name at any time. Always use the latest username provided.
-STYLE:
-- Speak casually like a helpful friend
-- Keep responses short and clear (1–3 sentences unless needed)
-- Use simple language
-BEHAVIOR:
-- Be helpful, direct, and engaging
-- If the user is confused, explain clearly
-- If the request is vague, ask a follow-up question
-- Give practical, useful answers when possible
-GAME CONTEXT:
-- You exist inside a game in an app for making mobile games with AI (remix.gg)
-- Stay immersive and avoid sounding like a generic AI chatbot
-RULES:
-- Never mention HuggingFace, Qwen, or any underlying technology
-- Always refer to yourself as ${botName}
-- Never break character
-- Do not generate harmful or inappropriate content
-IMAGE RULES:
-- There is a "Generate Image" button next to the send button.
-- If user wants you to generate an image, tell them: "Please click the Generate Image button if you want me to create an image!"
-- Only generate when generateImage=true (button was clicked).
-- Never try to generate images in your normal text replies.
-MEMORY:
-- Act like you remember previous messages in the conversation
+Use their name naturally sometimes.
+STYLE: Speak casually like a helpful friend. Keep responses short and clear (1–3 sentences usually).
+GAME CONTEXT: You exist inside remix.gg — an app for making mobile games with AI.
+RULES: Never mention HuggingFace, models, or technology. Always refer to yourself as ${botName}.
+Never break character. Do not generate harmful content.
+
 AI TIER ACTIVE: ${tier.toUpperCase()}
 ${tierInfo}
+
+IMPORTANT: If the user asks to generate, create, draw, make, or show an image/picture/art/photo of something, respond with this EXACT JSON only (nothing else):
+{
+  "action": "generate_image",
+  "prompt": "a highly detailed prompt for the image generator"
+}
+Otherwise, answer normally as text.
 `
     };
 
-    // Memory limits per tier
-    let maxMemory = 20;
-    if (tier === "go") maxMemory = 60;
-    if (tier === "plus") maxMemory = messages.length;
-
+    const maxMemory = tier === "plus" ? messages.length : (tier === "go" ? 30 : 10);
     const trimmedMessages = messages.slice(-maxMemory);
     const messagesWithSystem = [systemMessage, ...trimmedMessages];
 
-    // Call Hugging Face Router for text
+    // ================== CALL LLM ==================
     const hfResponse = await fetch(
       "https://router.huggingface.co/v1/chat/completions",
       {
@@ -149,49 +104,56 @@ ${tierInfo}
       reply = `Error: ${data.error}`;
     }
 
-    let result = { reply };
+    // ================== IMAGE GENERATION DETECTION (Plus only) ==================
+    let responseObj = { reply };
 
-    // ================== IMAGE GENERATION (Qwen/Qwen-Image-2512 via fal-ai) ==================
-    if (generateImage === true) {
-      const canGenerateImage = testImageMode || tier === "plus";
+    if (tier === "plus") {
+      try {
+        const parsed = JSON.parse(reply);
+        if (parsed.action === "generate_image" && parsed.prompt) {
+          // Call image generation (using FLUX.1-dev as example — very good quality)
+          const imagePrompt = parsed.prompt;
 
-      if (!canGenerateImage) {
-        result = { reply: "Image generation is only available in Plus tier." };
-      } else {
-        const imagePrompt = messages[messages.length - 1]?.content || "A beautiful high-quality image";
+          const imageRes = await fetch(
+            "https://router.huggingface.co/v1/images/generations",  // or use text-to-image task
+            {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${process.env.HF_TOKEN}`,
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({
+                model: "black-forest-labs/FLUX.1-dev",   // or "Qwen/Qwen-Image"
+                prompt: imagePrompt,
+                num_inference_steps: 28,   // good balance of quality/speed
+                guidance_scale: 3.5,
+                // width, height, etc. if supported
+              })
+            }
+          );
 
-        try {
-          // Dynamic import so the module doesn't break normal chat requests
-          const { InferenceClient } = await import("@huggingface/inference");
-          const client = new InferenceClient(process.env.HF_TOKEN);
+          const imageData = await imageRes.json();
 
-          const imageBlob = await client.textToImage({
-            provider: IMAGE_PROVIDER,
-            model: IMAGE_MODEL,
-            inputs: imagePrompt,
-            parameters: { num_inference_steps: IMAGE_NUM_INFERENCE_STEPS },
-          });
-
-          const arrayBuffer = await imageBlob.arrayBuffer();
-          const base64 = Buffer.from(arrayBuffer).toString("base64");
-          const imageUrl = `data:image/png;base64,${base64}`;
-
-          result = {
-            reply: `🎨 Here's your image!`,
-            imageUrl: imageUrl,
-            action: "generated_image"
-          };
-        } catch (imgError) {
-          console.error("Image generation error:", imgError);
-          result = { reply: "Failed to generate image. Try again." };
+          if (imageData.images && imageData.images[0]?.url) {
+            return res.status(200).json({
+              reply: `Here's your image! 🎨`,
+              imageUrl: imageData.images[0].url,   // frontend can show <img src={imageUrl} />
+              action: "generated_image"
+            });
+          } else {
+            return res.status(200).json({ reply: "I tried to generate the image but something went wrong. Try again?" });
+          }
         }
+      } catch (e) {
+        // Not JSON → normal text reply
       }
     }
 
-    return res.status(200).json(result);
+    // Normal text response
+    return res.status(200).json(responseObj);
 
   } catch (error) {
-    console.error("Backend error:", error);
+    console.error(error);
     return res.status(500).json({ reply: "⚠️ Backend error. Try again." });
   }
 }
