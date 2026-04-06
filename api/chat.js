@@ -1,9 +1,10 @@
 export default async function handler(req, res) {
-  // CORS headers
+  // CORS headers (backup)
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
+  // Handle preflight request
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
@@ -40,7 +41,7 @@ export default async function handler(req, res) {
 
     const data = await hfResponse.json();
 
-    let reply = "Sorry, I couldn't generate a response.";
+    let reply = "Sorry, I couldn't generate a response right now.";
 
     if (Array.isArray(data) && data[0]?.generated_text) {
       reply = data[0].generated_text.trim();
