@@ -1,4 +1,6 @@
 // pages/api/chat.js
+import { InferenceClient } from "@huggingface/inference";
+
 export default async function handler(req, res) {
   // CORS Headers - improved for better compatibility
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -32,19 +34,23 @@ export default async function handler(req, res) {
     }
 
     // === EASY CONFIGURATION SECTION ===
-    // Change these values whenever you want to update models (no other code changes needed)
+    // Change these values whenever you want (no other code changes needed)
+
+    // Text models (keeps your original Qwen setup via Hugging Face router)
     const DEFAULT_MODEL = "Qwen/Qwen2.5-7B-Instruct";
     const GO_MODEL = "GO_MODEL_PLACEHOLDER";        // ← change this for "go" tier
     const PLUS_MODEL = "PLUS_MODEL_PLACEHOLDER";    // ← change this for "plus" tier
 
-    // Image generation model (Hugging Face FLUX)
-    const IMAGE_MODEL_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell";
+    // NEW Image generation config (Qwen/Qwen-Image-2512 via fal-ai)
+    const IMAGE_PROVIDER = "fal-ai";
+    const IMAGE_MODEL = "Qwen/Qwen-Image-2512";
+    const IMAGE_NUM_INFERENCE_STEPS = 5;   // increase if you want higher quality (slower)
 
     // Default values
     const tier = aiTier || "default";
     const botName = aiName || "Zecay AI";
 
-    // Tier configuration (keeps your original Qwen setup)
+    // Tier configuration (exactly as you have it)
     let model = DEFAULT_MODEL;
     let tierInfo = `
 DEFAULT TIER:
@@ -71,7 +77,7 @@ PLUS TIER:
 `;
     }
 
-    // System message (old working prompt + new image rules merged)
+    // System message (exactly as you modified it)
     const systemMessage = {
       role: "system",
       content: `
@@ -79,43 +85,36 @@ You are ${botName}, a smart, friendly, and slightly playful assistant inside a g
 The current user's name is ${username || "Player"}.
 Use their name naturally in conversation sometimes, but not in every message.
 ⚠️ The user can change their name at any time. Always use the latest username provided.
-
 STYLE:
 - Speak casually like a helpful friend
 - Keep responses short and clear (1–3 sentences unless needed)
 - Use simple language
-
 BEHAVIOR:
 - Be helpful, direct, and engaging
 - If the user is confused, explain clearly
 - If the request is vague, ask a follow-up question
 - Give practical, useful answers when possible
-
 GAME CONTEXT:
 - You exist inside a game in an app for making mobile games with AI (remix.gg)
 - Stay immersive and avoid sounding like a generic AI chatbot
-
 RULES:
 - Never mention HuggingFace, Qwen, or any underlying technology
 - Always refer to yourself as ${botName}
 - Never break character
 - Do not generate harmful or inappropriate content
-
 IMAGE RULES:
 - There is a "Generate Image" button next to the send button.
 - If user wants you to generate an image, tell them: "Please click the Generate Image button if you want me to create an image!"
 - Only generate when generateImage=true (button was clicked).
 - Never try to generate images in your normal text replies.
-
 MEMORY:
 - Act like you remember previous messages in the conversation
-
 AI TIER ACTIVE: ${tier.toUpperCase()}
 ${tierInfo}
 `
     };
 
-    // Memory limits per tier (multiplied by 2 because remembers 10 message of both user and assistant)
+    // Memory limits per tier (exactly as you changed it)
     let maxMemory = 20;
     if (tier === "go") maxMemory = 60;
     if (tier === "plus") maxMemory = messages.length;
@@ -123,7 +122,7 @@ ${tierInfo}
     const trimmedMessages = messages.slice(-maxMemory);
     const messagesWithSystem = [systemMessage, ...trimmedMessages];
 
-    // Call Hugging Face Router (exactly as your old working script)
+    // Call Hugging Face Router for text (exactly as you have it)
     const hfResponse = await fetch(
       "https://router.huggingface.co/v1/chat/completions",
       {
@@ -152,7 +151,7 @@ ${tierInfo}
 
     let result = { reply };
 
-    // ================== IMAGE GENERATION (added from new script) ==================
+    // ================== IMAGE GENERATION (NEW Qwen model via @huggingface/inference) ==================
     if (generateImage === true) {
       const canGenerateImage = testImageMode || tier === "plus";
 
@@ -161,29 +160,18 @@ ${tierInfo}
       } else {
         const imagePrompt = messages[messages.length - 1]?.content || "A beautiful high-quality image";
 
-        const imageRes = await fetch(
-          IMAGE_MODEL_URL,
-          {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${process.env.HF_TOKEN}`,
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              inputs: imagePrompt,
-              parameters: {
-                num_inference_steps: 20,
-                guidance_scale: 3.5,
-                width: 1024,
-                height: 1024
-              }
-            })
-          }
-        );
+        const client = new InferenceClient(process.env.HF_TOKEN);
 
-        if (imageRes.ok) {
-          const buffer = await imageRes.arrayBuffer();
-          const base64 = Buffer.from(buffer).toString("base64");
+        try {
+          const imageBlob = await client.textToImage({
+            provider: IMAGE_PROVIDER,
+            model: IMAGE_MODEL,
+            inputs: imagePrompt,
+            parameters: { num_inference_steps: IMAGE_NUM_INFERENCE_STEPS },
+          });
+
+          const arrayBuffer = await imageBlob.arrayBuffer();
+          const base64 = Buffer.from(arrayBuffer).toString("base64");
           const imageUrl = `data:image/png;base64,${base64}`;
 
           result = {
@@ -191,7 +179,8 @@ ${tierInfo}
             imageUrl: imageUrl,
             action: "generated_image"
           };
-        } else {
+        } catch (imgError) {
+          console.error("Image generation error:", imgError);
           result = { reply: "Failed to generate image. Try again." };
         }
       }
