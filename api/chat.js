@@ -13,14 +13,15 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { messages, username, aiTier } = req.body || {};
+    const { messages, username, aiTier, aiName } = req.body || {};
 
     if (!messages || !messages.length) {
       return res.status(400).json({ reply: "No messages provided" });
     }
 
-    // Default tier fallback
+    // Default values
     const tier = aiTier || "default";
+    const botName = aiName || "Zecay AI";
 
     // Tier configuration
     let model = "Qwen/Qwen2.5-7B-Instruct";
@@ -44,7 +45,6 @@ PLUS TIER:
 - Highest intelligence and speed
 `;
     } else {
-      // default tier
       tierInfo = `
 DEFAULT TIER:
 - Can remember up to 10 past messages
@@ -57,7 +57,7 @@ DEFAULT TIER:
     const systemMessage = {
       role: "system",
       content: `
-You are Zecay AI, a smart, friendly, and slightly playful assistant inside a game.
+You are ${botName}, a smart, friendly, and slightly playful assistant inside a game.
 
 The current user's name is ${username || "Player"}.
 Use their name naturally in conversation sometimes, but not in every message.
@@ -80,7 +80,7 @@ GAME CONTEXT:
 
 RULES:
 - Never mention HuggingFace, Qwen, or any underlying technology
-- Always refer to yourself as Zecay AI
+- Always refer to yourself as ${botName}
 - Never break character
 - Do not generate harmful or inappropriate content
 
@@ -92,13 +92,12 @@ ${tierInfo}
 `
     };
 
-    // Optional: Trim messages based on tier memory
+    // Memory limits per tier
     let maxMemory = 10;
     if (tier === "go") maxMemory = 30;
-    if (tier === "plus") maxMemory = messages.length; // unlimited
+    if (tier === "plus") maxMemory = messages.length;
 
     const trimmedMessages = messages.slice(-maxMemory);
-
     const messagesWithSystem = [systemMessage, ...trimmedMessages];
 
     const hfResponse = await fetch(
@@ -119,6 +118,7 @@ ${tierInfo}
     );
 
     const data = await hfResponse.json();
+
     let reply = "Sorry, I couldn't generate a response right now.";
 
     if (data.choices && data.choices[0]?.message?.content) {
