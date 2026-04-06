@@ -1,33 +1,55 @@
-// getMessages.js
-import { initializeApp } from "firebase/app";
-import { getDatabase, ref, get } from "firebase/database";
-
-export const config = {
-  api: { bodyParser: true } // allows GET/POST parsing
-};
-
-// Firebase config
-const firebaseConfig = {
-  apiKey: "AIzaSyD7OLFKI-ip5xnyyKe7G3Q0UmeyeAFzzBs",
-  authDomain: "testingforweb-5e996.firebaseapp.com",
-  databaseURL: "https://testingforweb-5e996-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "testingforweb-5e996",
-  storageBucket: "testingforweb-5e996.firebasestorage.app",
-  messagingSenderId: "367983821716",
-  appId: "1:367983821716:web:c2597aef60c000a1dfc581"
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
-
 export default async function handler(req, res) {
+  // Enable CORS so your remix.gg game can call it
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   try {
-    const snapshot = await get(ref(db, "messages"));
-    const data = snapshot.val() || {};
-    res.status(200).json(data);
-  } catch (err) {
-    console.error("getMessages error:", err);
-    res.status(500).json({ error: err.message });
+    const { message } = req.body;
+
+    if (!message) {
+      return res.status(400).json({ error: "No message provided" });
+    }
+
+    const hfResponse = await fetch(
+      "https://api-inference.huggingface.co/models/google/gemma-2-2b-it",
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.HF_TOKEN}`,   // We'll add this in Vercel dashboard
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          inputs: `User: ${message}\nAssistant:`,
+          parameters: {
+            max_new_tokens: 250,
+            temperature: 0.75,
+            return_full_text: false
+          }
+        })
+      }
+    );
+
+    const data = await hfResponse.json();
+
+    let reply = "Sorry, I couldn't generate a response.";
+
+    if (Array.isArray(data) && data[0]?.generated_text) {
+      reply = data[0].generated_text.trim();
+    } else if (data.generated_text) {
+      reply = data.generated_text.trim();
+    } else if (data.error) {
+      reply = `HF Error: ${data.error}`;
+    }
+
+    return res.status(200).json({ reply });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ reply: "⚠️ Backend error. Try again." });
   }
 }
