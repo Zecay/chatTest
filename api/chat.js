@@ -21,7 +21,7 @@ export default async function handler(req, res) {
     }
 
     const hfResponse = await fetch(
-      "https://router.huggingface.co/hf-inference/models/google/gemma-2-2b-it",
+      "https://router.huggingface.co/hf-inference/models/Qwen/Qwen2.5-7B-Instruct",
       {
         method: "POST",
         headers: {
