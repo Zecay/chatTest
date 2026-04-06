@@ -1,16 +1,22 @@
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  // Always set CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*'); // allow all origins
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS'); // allow all methods
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization'); // allow common headers
 
+  // Handle preflight requests
   if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+    return res.status(200).end();
   }
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({ reply: "Method not allowed" });
+  // Example: handle POST request
+  if (req.method === 'POST') {
+    return res.status(200).json({ reply: 'CORS is always allowed!' });
   }
+
+  // Handle other methods
+  res.status(200).json({ reply: 'CORS is always allowed, whatever the method!' });
+}
 
   try {
     // Updated destructuring to include the new parameters from frontend
