@@ -2,17 +2,27 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  if (req.method === 'OPTIONS') { res.status(200).end(); return; }
-  if (req.method !== 'POST') return res.status(405).json({ reply: "Method not allowed" });
+
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ reply: "Method not allowed" });
+  }
 
   try {
     const { messages, username } = req.body || {};
+
     if (!messages || !messages.length) {
       return res.status(400).json({ reply: "No messages provided" });
     }
 
+    // System message for Zecay AI
+    const systemMessage = {
       role: "system",
-    content: `
+      content: `
 You are Zecay AI, a smart, friendly, and slightly playful assistant inside a game.
 
 The current user's name is ${username || "Player"}.
@@ -44,7 +54,7 @@ RULES:
 MEMORY:
 - Act like you remember previous messages in the conversation
 `
-};
+    };
 
     const messagesWithSystem = [systemMessage, ...messages];
 
@@ -67,6 +77,7 @@ MEMORY:
 
     const data = await hfResponse.json();
     let reply = "Sorry, I couldn't generate a response right now.";
+
     if (data.choices && data.choices[0]?.message?.content) {
       reply = data.choices[0].message.content.trim();
     } else if (data.error) {
