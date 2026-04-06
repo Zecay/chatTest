@@ -115,9 +115,9 @@ ${tierInfo}
 `
     };
 
-    // Memory limits per tier (exactly as your old working script)
-    let maxMemory = 10;
-    if (tier === "go") maxMemory = 30;
+    // Memory limits per tier (multiplied by 2 because remembers 10 message of both user and assistant)
+    let maxMemory = 20;
+    if (tier === "go") maxMemory = 60;
     if (tier === "plus") maxMemory = messages.length;
 
     const trimmedMessages = messages.slice(-maxMemory);
