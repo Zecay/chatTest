@@ -35,10 +35,14 @@ export default async function handler(req, res) {
     const tier = aiTier || "default";
     const botName = aiName || "Czarek AI";
 
-    // Choose text model
-    let textModel = "qwen/qwen2.5-7b-instruct:free";
-    if (tier === "go") textModel = "meta-llama/llama-3.3-70b-instruct:free";
-    else if (tier === "plus") textModel = "qwen/qwen3.6-plus:free";
+    // ================== choose model ==================
+    let textModel = "openrouter/free";   // Smart router - picks best available free model
+
+    if (tier === "go") {
+      textModel = "nvidia/nemotron-3-super-120b-a12b:free";     // Good for Go tier
+    } else if (tier === "plus") {
+      textModel = "stepfun/step-3.5-flash:free";                // Fast for Plus tier
+    }
 
     const canGenerateImage = testImageMode || tier === "plus";
 
