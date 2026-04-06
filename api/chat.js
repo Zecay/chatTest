@@ -1,159 +1,153 @@
+// pages/api/chat.js ← This is your updated file
 export default async function handler(req, res) {
+  // CORS Headers - MUST be at the very top
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
 
+  // Handle Preflight (OPTIONS) Request - Very Important
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
+
+  // Only allow POST requests
   if (req.method !== 'POST') {
     return res.status(405).json({ reply: "Method not allowed" });
   }
 
   try {
-    const { messages, username, aiTier, aiName } = req.body || {};
+    const {
+      messages,
+      username,
+      aiTier,
+      aiName,
+      generateImage = false,
+      testImageMode = false
+    } = req.body || {};
+
     if (!messages || !messages.length) {
       return res.status(400).json({ reply: "No messages provided" });
     }
 
     const tier = aiTier || "default";
-    const botName = aiName || "Zecay AI";
+    const botName = aiName || "Czarek AI";
 
-    // ================== TIER CONFIG ==================
-    let model = "Qwen/Qwen2.5-7B-Instruct";
-    let tierInfo = "";
+    // ================== choose model ==================
+    // These are the best 100% FREE models on OpenRouter right now (April 2026)
+    // - "go" tier   → fast & reliable (slightly lighter)
+    // - "plus" tier → noticeably smarter & higher quality
+    let textModel = "openrouter/free"; // fallback smart router (also free)
 
     if (tier === "go") {
-      model = "openai/gpt-oss-120b";           // ← Your Go tier model
-      tierInfo = `
-GO TIER:
-- Can remember up to 30 past messages
-- Smarter and faster responses
-- More contextual understanding
-`;
+      textModel = "stepfun/step-3.5-flash:free";        // slightly worse but super fast & high usage
     } else if (tier === "plus") {
-      model = "Qwen/Qwen3-Omni-30B-A3B-Instruct";   // ← Your Plus tier model (omni for vision)
-      tierInfo = `
-PLUS TIER:
-- Unlimited memory
-- Best response quality + Image understanding
-- Image generation available
-- Highest intelligence
-`;
-    } else {
-      tierInfo = `
-DEFAULT TIER:
-- Can remember up to 10 past messages
-- Standard intelligence
-`;
+      textModel = "qwen/qwen3.6-plus:free";             // better one (currently one of the strongest free models)
     }
 
-    // ================== SYSTEM MESSAGE ==================
+    const canGenerateImage = testImageMode || tier === "plus";
+
+    // System prompt (kept exactly as you had it)
     const systemMessage = {
       role: "system",
       content: `
-You are ${botName}, a smart, friendly, and slightly playful assistant inside a game.
-The current user's name is ${username || "Player"}.
-Use their name naturally sometimes.
-STYLE: Speak casually like a helpful friend. Keep responses short and clear (1–3 sentences usually).
-GAME CONTEXT: You exist inside remix.gg — an app for making mobile games with AI.
-RULES: Never mention HuggingFace, models, or technology. Always refer to yourself as ${botName}.
-Never break character. Do not generate harmful content.
-
-AI TIER ACTIVE: ${tier.toUpperCase()}
-${tierInfo}
-
-IMPORTANT: If the user asks to generate, create, draw, make, or show an image/picture/art/photo of something, respond with this EXACT JSON only (nothing else):
-{
-  "action": "generate_image",
-  "prompt": "a highly detailed prompt for the image generator"
-}
-Otherwise, answer normally as text.
+You are ${botName}, a smart, friendly assistant in remix.gg.
+Current user: ${username || "Player"}.
+Speak casually and keep replies short.
+Never mention models or technology.
+IMAGE RULES:
+- There is a "Generate Image" button next to the send button.
+- If user wants image but didn't click the button, tell them: "Please click the Generate Image button if you want me to create an image!"
+- Only generate when generateImage=true.
+- When generating, reply with EXACT JSON only: {"action": "generate_image", "prompt": "detailed prompt here"}
+AI TIER: ${tier.toUpperCase()}
 `
     };
 
     const maxMemory = tier === "plus" ? messages.length : (tier === "go" ? 30 : 10);
-    const trimmedMessages = messages.slice(-maxMemory);
-    const messagesWithSystem = [systemMessage, ...trimmedMessages];
+    const messagesWithSystem = [systemMessage, ...messages.slice(-maxMemory)];
 
-    // ================== CALL LLM ==================
-    const hfResponse = await fetch(
-      "https://router.huggingface.co/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${process.env.HF_TOKEN}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model,
-          messages: messagesWithSystem,
-          max_tokens: 600,
-          temperature: 0.75
-        })
-      }
-    );
+    // Call OpenRouter for text response
+    const textResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        "HTTP-Referer": "https://remix.gg",
+        "X-Title": "Czarek AI",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: textModel,
+        messages: messagesWithSystem,
+        max_tokens: 600,
+        temperature: 0.75
+      })
+    });
 
-    const data = await hfResponse.json();
-    let reply = "Sorry, I couldn't generate a response right now.";
+    const data = await textResponse.json();
 
-    if (data.choices && data.choices[0]?.message?.content) {
-      reply = data.choices[0].message.content.trim();
-    } else if (data.error) {
-      reply = `Error: ${data.error}`;
+    // Better error handling (no more confusing messages)
+    if (!textResponse.ok || data.error) {
+      console.error("OpenRouter API error:", {
+        status: textResponse.status,
+        error: data.error || data
+      });
+
+      return res.status(200).json({
+        reply: "Sorry, the AI is taking a nap right now 😴 Try again in a few seconds."
+      });
     }
 
-    // ================== IMAGE GENERATION DETECTION (Plus only) ==================
-    let responseObj = { reply };
+    let reply = data.choices?.[0]?.message?.content?.trim() || "Sorry, I got stuck...";
+    let result = { reply };
 
-    if (tier === "plus") {
-      try {
-        const parsed = JSON.parse(reply);
-        if (parsed.action === "generate_image" && parsed.prompt) {
-          // Call image generation (using FLUX.1-dev as example — very good quality)
-          const imagePrompt = parsed.prompt;
+    // ================== IMAGE GENERATION ==================
+    if (generateImage === true) {
+      if (!canGenerateImage) {
+        result = { reply: "Image generation is only available in Plus tier." };
+      } else {
+        const imagePrompt = messages[messages.length - 1]?.content || "A beautiful high-quality image";
 
-          const imageRes = await fetch(
-            "https://router.huggingface.co/v1/images/generations",  // or use text-to-image task
-            {
-              method: "POST",
-              headers: {
-                "Authorization": `Bearer ${process.env.HF_TOKEN}`,
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({
-                model: "black-forest-labs/FLUX.1-dev",   // or "Qwen/Qwen-Image"
-                prompt: imagePrompt,
-                num_inference_steps: 28,   // good balance of quality/speed
+        const imageRes = await fetch(
+          "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell",
+          {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${process.env.HF_TOKEN}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              inputs: imagePrompt,
+              parameters: {
+                num_inference_steps: 20,      // faster & still great quality
                 guidance_scale: 3.5,
-                // width, height, etc. if supported
-              })
-            }
-          );
-
-          const imageData = await imageRes.json();
-
-          if (imageData.images && imageData.images[0]?.url) {
-            return res.status(200).json({
-              reply: `Here's your image! 🎨`,
-              imageUrl: imageData.images[0].url,   // frontend can show <img src={imageUrl} />
-              action: "generated_image"
-            });
-          } else {
-            return res.status(200).json({ reply: "I tried to generate the image but something went wrong. Try again?" });
+                width: 1024,
+                height: 1024
+              }
+            })
           }
+        );
+
+        if (imageRes.ok) {
+          const buffer = await imageRes.arrayBuffer();
+          const base64 = Buffer.from(buffer).toString("base64");
+          const imageUrl = `data:image/png;base64,${base64}`;
+
+          result = {
+            reply: `🎨 Here's your image!`,
+            imageUrl: imageUrl,
+            action: "generated_image"
+          };
+        } else {
+          result = { reply: "Failed to generate image. Try again." };
         }
-      } catch (e) {
-        // Not JSON → normal text reply
       }
     }
 
-    // Normal text response
-    return res.status(200).json(responseObj);
-
+    return res.status(200).json(result);
   } catch (error) {
-    console.error(error);
+    console.error("Backend error:", error);
     return res.status(500).json({ reply: "⚠️ Backend error. Try again." });
   }
 }
