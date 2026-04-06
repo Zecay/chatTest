@@ -2,11 +2,11 @@
 import { InferenceClient } from "@huggingface/inference";
 
 export default async function handler(req, res) {
-  // CORS Headers - improved for better compatibility
+  // CORS Headers - FIXED for remix.gg + Vercel
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  // ← Removed Access-Control-Allow-Credentials (this was causing the preflight error with *)
 
   // Handle Preflight (OPTIONS) Request
   if (req.method === 'OPTIONS') {
@@ -36,7 +36,7 @@ export default async function handler(req, res) {
     // === EASY CONFIGURATION SECTION ===
     // Change these values whenever you want (no other code changes needed)
 
-    // Text models (keeps your original Qwen setup via Hugging Face router)
+    // Text models
     const DEFAULT_MODEL = "Qwen/Qwen2.5-7B-Instruct";
     const GO_MODEL = "GO_MODEL_PLACEHOLDER";        // ← change this for "go" tier
     const PLUS_MODEL = "PLUS_MODEL_PLACEHOLDER";    // ← change this for "plus" tier
@@ -50,7 +50,7 @@ export default async function handler(req, res) {
     const tier = aiTier || "default";
     const botName = aiName || "Zecay AI";
 
-    // Tier configuration (exactly as you have it)
+    // Tier configuration
     let model = DEFAULT_MODEL;
     let tierInfo = `
 DEFAULT TIER:
@@ -77,7 +77,7 @@ PLUS TIER:
 `;
     }
 
-    // System message (exactly as you modified it)
+    // System message (exactly as you have it)
     const systemMessage = {
       role: "system",
       content: `
@@ -122,7 +122,7 @@ ${tierInfo}
     const trimmedMessages = messages.slice(-maxMemory);
     const messagesWithSystem = [systemMessage, ...trimmedMessages];
 
-    // Call Hugging Face Router for text (exactly as you have it)
+    // Call Hugging Face Router for text
     const hfResponse = await fetch(
       "https://router.huggingface.co/v1/chat/completions",
       {
@@ -151,7 +151,7 @@ ${tierInfo}
 
     let result = { reply };
 
-    // ================== IMAGE GENERATION (NEW Qwen model via @huggingface/inference) ==================
+    // ================== IMAGE GENERATION (Qwen/Qwen-Image-2512 via fal-ai) ==================
     if (generateImage === true) {
       const canGenerateImage = testImageMode || tier === "plus";
 
