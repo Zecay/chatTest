@@ -1,22 +1,19 @@
 export default async function handler(req, res) {
-  // === CORS HEADERS (this is the fix) ===
+  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
 
-  // Handle preflight OPTIONS request (browser always sends this first)
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
-  // Only allow POST
   if (req.method !== 'POST') {
     return res.status(405).json({ reply: "Method not allowed" });
   }
 
   try {
-    const { message } = req.body;
+    const { message } = req.body || {};
 
     if (!message) {
       return res.status(400).json({ reply: "No message provided" });
@@ -43,20 +40,20 @@ export default async function handler(req, res) {
 
     const data = await hfResponse.json();
 
-    let reply = "Sorry, I couldn't generate a response right now.";
+    let reply = "Sorry, I couldn't generate a response.";
 
     if (Array.isArray(data) && data[0]?.generated_text) {
       reply = data[0].generated_text.trim();
     } else if (data.generated_text) {
       reply = data.generated_text.trim();
     } else if (data.error) {
-      reply = `HF Error: ${data.error}`;
+      reply = `Error: ${data.error}`;
     }
 
     return res.status(200).json({ reply });
 
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ reply: "⚠️ Backend error. Please try again." });
+    return res.status(500).json({ reply: "⚠️ Backend error. Try again." });
   }
 }
