@@ -89,7 +89,7 @@ AI TIER: ${tier.toUpperCase()}
 
     if (!textResponse.ok || data.error) {
       return res.status(200).json({
-        reply: `⚠️ AI is busy right now. Wait 10 seconds and try again.`
+        reply: `⚠️ something blocking`
       });
     }
 
