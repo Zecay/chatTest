@@ -13,13 +13,47 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { messages, username } = req.body || {};
+    const { messages, username, aiTier } = req.body || {};
 
     if (!messages || !messages.length) {
       return res.status(400).json({ reply: "No messages provided" });
     }
 
-    // System message for Zecay AI
+    // Default tier fallback
+    const tier = aiTier || "default";
+
+    // Tier configuration
+    let model = "Qwen/Qwen2.5-7B-Instruct";
+    let tierInfo = "";
+
+    if (tier === "go") {
+      model = "GO_MODEL_PLACEHOLDER"; // <-- replace later
+      tierInfo = `
+GO TIER:
+- Can remember up to 30 past messages
+- Smarter and faster responses than default
+- More contextual understanding
+`;
+    } else if (tier === "plus") {
+      model = "PLUS_MODEL_PLACEHOLDER"; // <-- replace later
+      tierInfo = `
+PLUS TIER:
+- Unlimited memory (can recall entire conversation)
+- Best response quality
+- Image understanding support enabled
+- Highest intelligence and speed
+`;
+    } else {
+      // default tier
+      tierInfo = `
+DEFAULT TIER:
+- Can remember up to 10 past messages
+- Standard intelligence
+- Slower responses compared to higher tiers
+`;
+    }
+
+    // System message
     const systemMessage = {
       role: "system",
       content: `
@@ -27,7 +61,7 @@ You are Zecay AI, a smart, friendly, and slightly playful assistant inside a gam
 
 The current user's name is ${username || "Player"}.
 Use their name naturally in conversation sometimes, but not in every message.
-⚠️ Note: The user can change their name at any time. Always use the latest username provided in the request.
+⚠️ The user can change their name at any time. Always use the latest username provided.
 
 STYLE:
 - Speak casually like a helpful friend
@@ -52,10 +86,20 @@ RULES:
 
 MEMORY:
 - Act like you remember previous messages in the conversation
+
+AI TIER ACTIVE: ${tier.toUpperCase()}
+${tierInfo}
 `
     };
 
-    const messagesWithSystem = [systemMessage, ...messages];
+    // Optional: Trim messages based on tier memory
+    let maxMemory = 10;
+    if (tier === "go") maxMemory = 30;
+    if (tier === "plus") maxMemory = messages.length; // unlimited
+
+    const trimmedMessages = messages.slice(-maxMemory);
+
+    const messagesWithSystem = [systemMessage, ...trimmedMessages];
 
     const hfResponse = await fetch(
       "https://router.huggingface.co/v1/chat/completions",
@@ -66,7 +110,7 @@ MEMORY:
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: "Qwen/Qwen2.5-7B-Instruct",
+          model,
           messages: messagesWithSystem,
           max_tokens: 600,
           temperature: 0.75
