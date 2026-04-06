@@ -6,15 +6,18 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ reply: "Method not allowed" });
 
   try {
-    const { messages } = req.body || {};
+    const { messages, username } = req.body || {};
     if (!messages || !messages.length) {
       return res.status(400).json({ reply: "No messages provided" });
     }
 
-    const systemMessage = {
-  role: "system",
-  content: `
+      const systemMessage = {
+    role: "system",
+    content: `
 You are Zecay AI, a smart, friendly, and slightly playful assistant inside a game.
+
+The current user's name is ${username || "Player"}.
+Use their name naturally in conversation sometimes, but not in every message.
 
 STYLE:
 - Speak casually like a helpful friend
