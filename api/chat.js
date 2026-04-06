@@ -32,8 +32,10 @@ export default async function handler(req, res) {
     let tierInfo = "";
     const tier = aiTier || "default";
 
-    if (tier === "go" || tier === "plus") {
-      textModel = "Qwen/Qwen2.5-14B-Instruct"; // BIGGER & SMARTER (FREE)
+    if (tier === "go") {
+      textModel = "zementalist/llama-3-8B-chat-psychotherapist"; // EMPATHETIC
+    } else if (tier === "plus") {
+      textModel = "zementalist/llama-3-8B-chat-psychotherapist"; // EMPATHETIC
     }
 
     if (tier === "go") {
@@ -60,9 +62,9 @@ DEFAULT TIER:
 `;
     }
 
-    // ===== 5️⃣ IMAGE GENERATION (PLUS TIER ONLY) =====
+    // ===== 5️⃣ IMAGE GENERATION (PLUS TIER ONLY) - NO TEXT RESPONSE =====
     if (generateImage && tier === "plus") {
-      console.log("🎨 Image generation requested");
+      console.log("🎨 Image generation requested - ONLY generating image");
       
       const lastUserMessage = messages[messages.length - 1]?.content || "A beautiful landscape";
       
@@ -81,14 +83,17 @@ DEFAULT TIER:
         const buffer = await image.arrayBuffer();
         const base64Image = Buffer.from(buffer).toString('base64');
         
+        // ONLY RETURN IMAGE, NO TEXT REPLY
         return res.status(200).json({
-          reply: `🎨 Image generated based on: "${lastUserMessage}"`,
           imageData: `data:image/png;base64,${base64Image}`,
           generateImageProcessed: true
         });
       } catch (imgError) {
         console.error("Image generation error:", imgError);
-        // Fall through to text generation
+        return res.status(500).json({ 
+          reply: "⚠️ Failed to generate image.",
+          generateImageProcessed: false
+        });
       }
     }
 
