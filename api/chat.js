@@ -89,7 +89,7 @@ AI TIER: ${tier.toUpperCase()}
 
     if (!textResponse.ok || data.error) {
       return res.status(200).json({
-        reply: `⚠️ WHAT THE FUCK IS HAPPENING?`
+        reply: `⚠️ something wrong`
       });
     }
 
