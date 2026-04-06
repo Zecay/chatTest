@@ -1,15 +1,6 @@
 // pages/api/chat.js
-import { InferenceClient } from "@huggingface/inference";
-
 export default async function handler(req, res) {
-  // ===== 1️⃣ CORS HEADERS (apply to all requests) =====
-  res.setHeader("Access-Control-Allow-Origin", "*"); // allow all origins
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-
-  // Handle preflight OPTIONS request
-  if (req.method === "OPTIONS") return res.status(200).end();
-  // ===== CRITICAL: Set CORS headers FIRST =====
+  // ===== 1️⃣ CORS HEADERS (FIRST THING!) =====
   res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS,PATCH,DELETE,POST,PUT");
@@ -18,32 +9,30 @@ export default async function handler(req, res) {
     "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization"
   );
 
-  // Handle preflight
+  // Handle preflight OPTIONS request
   if (req.method === "OPTIONS") {
     res.status(200).end();
     return;
   }
 
   // ===== 2️⃣ Only allow POST =====
-  // Only allow POST
   if (req.method !== "POST") {
     return res.status(405).json({ reply: "Method not allowed. Use POST." });
   }
 
   try {
-    // ===== 2️⃣ Extract body =====
+    // ===== 3️⃣ Extract body =====
     const { messages, username, aiTier, aiName, generateImage } = req.body || {};
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ reply: "No messages provided." });
     }
 
-    // ===== 3️⃣ Determine model & tier info =====
+    // ===== 4️⃣ Determine model & tier info =====
     let textModel = "Qwen/Qwen2.5-7B-Instruct"; // default
     let tierInfo = "";
     const tier = aiTier || "default";
 
     if (tier === "go" || tier === "plus") {
-      // BOTH GO AND PLUS USE SAME TEXT MODEL (better than default)
       textModel = "mistralai/Mistral-7B-Instruct-v0.2"; // FREE & BETTER
     }
 
@@ -71,16 +60,17 @@ DEFAULT TIER:
 `;
     }
 
-    // ===== 4️⃣ Check if we need IMAGE GENERATION =====
+    // ===== 5️⃣ IMAGE GENERATION (PLUS TIER ONLY) =====
     if (generateImage && tier === "plus") {
-      console.log("🎨 Image generation requested for PLUS tier");
+      console.log("🎨 Image generation requested");
       
-      const client = new InferenceClient(process.env.HF_TOKEN);
-      
-      // Get the user's last message as the image prompt
       const lastUserMessage = messages[messages.length - 1]?.content || "A beautiful landscape";
       
       try {
+        // Use dynamic import for HuggingFace client
+        const { InferenceClient } = await import("@huggingface/inference");
+        const client = new InferenceClient(process.env.HF_TOKEN);
+        
         const image = await client.textToImage({
           provider: "fal-ai",
           model: "Qwen/Qwen-Image-2512",
@@ -88,7 +78,6 @@ DEFAULT TIER:
           parameters: { num_inference_steps: 5 },
         });
 
-        // Convert Blob to base64
         const buffer = await image.arrayBuffer();
         const base64Image = Buffer.from(buffer).toString('base64');
         
@@ -99,13 +88,11 @@ DEFAULT TIER:
         });
       } catch (imgError) {
         console.error("Image generation error:", imgError);
-        return res.status(500).json({ 
-          reply: "⚠️ Failed to generate image. Falling back to text response." 
-        });
+        // Fall through to text generation
       }
     }
 
-    // ===== 5️⃣ System prompt (USE aiName VARIABLE) =====
+    // ===== 6️⃣ System prompt (USE aiName VARIABLE) =====
     const systemMessage = {
       role: "system",
       content: `
@@ -132,7 +119,7 @@ ${tierInfo}
 `
     };
 
-    // ===== 6️⃣ Trim memory based on tier =====
+    // ===== 7️⃣ Trim memory based on tier =====
     let maxMemory = 20;
     if (tier === "go") maxMemory = 60;
     if (tier === "plus") maxMemory = messages.length; // unlimited
@@ -140,10 +127,10 @@ ${tierInfo}
     const trimmedMessages = messages.slice(-maxMemory);
     const messagesWithSystem = [systemMessage, ...trimmedMessages];
 
-    // ===== 7️⃣ Debug log =====
+    // ===== 8️⃣ Debug log =====
     console.log(`Received request - Tier: ${tier}, generateImage: ${generateImage}, aiName: ${aiName}`);
 
-    // ===== 8️⃣ HuggingFace TEXT API call =====
+    // ===== 9️⃣ HuggingFace TEXT API call =====
     const hfResponse = await fetch("https://router.huggingface.co/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -167,7 +154,7 @@ ${tierInfo}
       reply = `Error: ${data.error}`;
     }
 
-    // ===== 9️⃣ Send response =====
+    // ===== 10️⃣ Send response =====
     return res.status(200).json({
       reply,
       generateImageProcessed: false
