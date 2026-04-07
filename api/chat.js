@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     }
 
     // ===== 4️⃣ Determine model & tier info =====
-    let textModel = "openchat/openchat_3.5"; // default
+    let textModel = "microsoft/Phi-4-mini-instruct";
     let tierInfo = "";
     const tier = aiTier || "default";
 
