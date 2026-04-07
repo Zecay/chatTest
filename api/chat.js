@@ -33,33 +33,58 @@ export default async function handler(req, res) {
     const tier = aiTier || "default";
 
     if (tier === "go") {
-      textModel = "meta-llama/Llama-3.1-8B-Instruct";
+      textModel = "Qwen/Qwen2.5-7B-Instruct";
     } else if (tier === "plus") {
-      textModel = "meta-llama/Llama-3.1-8B-Instruct";
+      textModel = "Qwen/Qwen2.5-7B-Instruct";
     }
 
-    if (tier === "go") {
-      tierInfo = `
+    let tierInfo = "";
+
+if (tier === "go") {
+  tierInfo = `
 GO TIER:
 - Can remember up to 30 past messages
 - Faster, smarter responses
 - Better context
+
+CUSTOM PERSONALITY:
+- Friendly, relaxed, and engaging
+- Feels like a good online friend
+- Shows clear emotion and understanding
+- Slightly playful and fun
+- Keeps conversations interesting and alive
 `;
-    } else if (tier === "plus") {
-      tierInfo = `
+} else if (tier === "plus") {
+  tierInfo = `
 PLUS TIER:
 - Unlimited memory
 - Best quality responses
 - Image generation support
 - Fastest intelligence
+
+CUSTOM PERSONALITY:
+- Very human-like and emotionally intelligent
+- Warm, caring, and deeply supportive
+- Feels like a close friend you trust
+- Highly engaging and never boring
+- Strong emotional understanding and connection
 `;
-    } else {
-      tierInfo = `
+} else {
+  tierInfo = `
 DEFAULT TIER:
 - Can remember up to 10 past messages
 - Standard intelligence
 - Slower responses
+
+CUSTOM PERSONALITY:
+- Friendly and supportive
+- Simple but still warm and kind
+- Short to medium responses
+- Shows basic empathy
+- Keeps the user motivated
+- Never dry or cold
 `;
+}
     }
 
     // ===== 5️⃣ IMAGE GENERATION (PLUS TIER ONLY) - NO TEXT RESPONSE =====
