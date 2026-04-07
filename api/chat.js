@@ -28,14 +28,14 @@ export default async function handler(req, res) {
     }
 
     // ===== 4️⃣ Determine model & tier info =====
-    let textModel = "Qwen/Qwen2.5-7B-Instruct";
+    let textModel = "meta-llama/Llama-3.1-8B-Instruct";
     let tierInfo = "";
     const tier = aiTier || "default";
 
     if (tier === "go") {
-      textModel = "Qwen/Qwen2.5-7B-Instruct";
+      textModel = "meta-llama/Llama-3.1-8B-Instruct";
     } else if (tier === "plus") {
-      textModel = "Qwen/Qwen2.5-7B-Instruct";
+      textModel = "meta-llama/Llama-3.1-8B-Instruct";
     }
 
     if (tier === "go") {
