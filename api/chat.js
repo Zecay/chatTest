@@ -199,7 +199,6 @@ RULES:
 - Act like you remember previous messages
 `
 };
-    };
 
     // ===== 7️⃣ Trim memory based on tier =====
     let maxMemory = 20;
