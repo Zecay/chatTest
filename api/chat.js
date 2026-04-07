@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     }
 
     // ===== 4️⃣ Determine model & tier info =====
-    let textModel = "microsoft/Phi-4-mini-instruct";
+    let textModel = "meta-llama/Llama-3.1-8B-Instruct";
     let tierInfo = "";
     const tier = aiTier || "default";
 
