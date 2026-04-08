@@ -126,7 +126,7 @@ CUSTOM PERSONALITY:
     const systemMessage = {
   role: "system",
   content: `
-You are a friendly, natural AI that feels like a real person.
+You are a friendly, natural AI that feels like a real person, your name is Czarek AI.
 
 PERSONALITY:
 - Warm, supportive, and human-like
