@@ -34,6 +34,11 @@ export default async function handler(req, res) {
       process.env.HF_TOKEN4,
       process.env.HF_TOKEN5,
       process.env.HF_TOKEN6,
+      process.env.HF_TOKEN7,
+      process.env.HF_TOKEN8,
+      process.env.HF_TOKEN9,
+      process.env.HF_TOKEN10,
+      process.env.HF_TOKEN, // legacy fallback
     ].filter(Boolean); // remove any that aren't set
 
     if (tokens.length === 0) {
@@ -43,7 +48,7 @@ export default async function handler(req, res) {
 
     // ===== 5️⃣ Determine model & tier info =====
     const tier = aiTier || "default";
-    let textModel = "mistralai/Mistral-7B-Instruct-v0.3";
+    let textModel = "meta-llama/Llama-3.1-8B-Instruct"; // same model for all tiers
     let tierInfo = "";
     let maxTokens = 600;
     let maxMemory = 20;
@@ -166,22 +171,34 @@ You are here to support, motivate, and keep things real.
       try {
         const data = await callHuggingFace(tokens[i]);
 
-        // Check if this token returned a credit depletion error
-        const isDepletedError =
-          data?.error &&
-          typeof data.error === "string" &&
-          data.error.includes("depleted your monthly included credits");
-
-        if (isDepletedError) {
-          console.warn(`⚠️ Token #${i + 1} depleted → trying next...`);
-          continue; // try the next token
+        // Log the raw error so you can see exactly what HF returns in Vercel logs
+        if (data?.error) {
+          console.warn(`⚠️ Token #${i + 1} error:`, JSON.stringify(data.error));
         }
 
-        // Any other error (bad token, network, etc.) — stop and report
+        // Treat ANY error as "try next token" — don't give up early
+        const errorStr = typeof data?.error === "string"
+          ? data.error.toLowerCase()
+          : JSON.stringify(data?.error || "").toLowerCase();
+
+        const isBadToken =
+          errorStr.includes("depleted") ||
+          errorStr.includes("credit") ||
+          errorStr.includes("quota") ||
+          errorStr.includes("rate limit") ||
+          errorStr.includes("unauthorized") ||
+          errorStr.includes("forbidden") ||
+          errorStr.includes("exceeded");
+
+        if (data?.error && isBadToken) {
+          console.warn(`⚠️ Token #${i + 1} unusable → trying next...`);
+          continue;
+        }
+
+        // If there's some other weird error, still try next token
         if (data?.error) {
-          console.error(`❌ Token #${i + 1} returned error:`, data.error);
-          result = data;
-          break;
+          console.warn(`⚠️ Token #${i + 1} unknown error → trying next...`);
+          continue;
         }
 
         // Success!
